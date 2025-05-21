@@ -2,8 +2,10 @@ package com.nexeyo.HRIS.check_ins;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.Optional;
 
 @Service
@@ -12,43 +14,51 @@ public class AttendanceService {
     @Autowired
     private AttendanceRecordRepository attendanceRecordRepository;
 
-    public AttendanceRecord checkIn(int id) {
+    public AttendanceRecord checkIn(int userId) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime startOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MIDNIGHT);
+        LocalDateTime endOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MAX);
 
-        LocalDate today = LocalDate.now();
+        // Check if already checked in today
+        Optional<AttendanceRecord> existingRecord = attendanceRecordRepository
+                .findFirstByUserIdAndCheckInTimeBetween(userId, startOfDay, endOfDay);
 
-        Optional<AttendanceRecord> existingRecordOpt = attendanceRecordRepository
-                .findFirstByUserIdAndCheckInTimeBetween(id, today.atStartOfDay(), today.plusDays(1).atStartOfDay());
-
-        if (existingRecordOpt.isPresent()) {
-            throw new RuntimeException("User with id: " + id + " has already checked in today.");
+        if (existingRecord.isPresent()) {
+            return existingRecord.get(); // Already checked in
         }
 
+        // Create new check-in record
         AttendanceRecord record = new AttendanceRecord();
-        record.setUserId(id);
-        record.setCheckInTime(LocalDateTime.now());
+        record.setUserId(userId);
+        record.setCheckInTime(now);
         return attendanceRecordRepository.save(record);
     }
 
-    public AttendanceRecord checkOut(int id) {
+    public AttendanceRecord checkOut(int userId) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime startOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MIDNIGHT);
+        LocalDateTime endOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MAX);
 
-        LocalDate today = LocalDate.now();
+        // Find today's attendance record with null check-out time
+        Optional<AttendanceRecord> existingRecord = attendanceRecordRepository
+                .findFirstByUserIdAndCheckInTimeBetweenAndCheckOutTimeIsNull(userId, startOfDay, endOfDay);
 
-        Optional<AttendanceRecord> recordOpt = attendanceRecordRepository
-                .findFirstByUserIdAndCheckInTimeBetweenAndCheckOutTimeIsNull(id, today.atStartOfDay(), today.plusDays(1).atStartOfDay());
-
-        if (recordOpt.isPresent()) {
-            AttendanceRecord record = recordOpt.get();
-            record.setCheckOutTime(LocalDateTime.now());
+        if (existingRecord.isPresent()) {
+            AttendanceRecord record = existingRecord.get();
+            record.setCheckOutTime(now);
             return attendanceRecordRepository.save(record);
-        } else {
-            throw new RuntimeException("No check-in record found for user with id: " + id + " for today.");
         }
-    }
-    public AttendanceRecord getAttendanceStatus(int userId) {
-        LocalDate today = LocalDate.now();
-        Optional<AttendanceRecord> recordOpt = attendanceRecordRepository
-                .findFirstByUserIdAndCheckInTimeBetween(userId, today.atStartOfDay(), today.plusDays(1).atStartOfDay());
 
-        return recordOpt.orElseThrow(() -> new RuntimeException("No attendance record found for user with id: " + userId));
+        return null; // No check-in record found
+    }
+
+    public AttendanceRecord getAttendanceStatus(int userId) {
+        LocalDateTime startOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MIDNIGHT);
+        LocalDateTime endOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MAX);
+
+        Optional<AttendanceRecord> todaysRecord = attendanceRecordRepository
+                .findFirstByUserIdAndCheckInTimeBetween(userId, startOfDay, endOfDay);
+
+        return todaysRecord.orElse(new AttendanceRecord());
     }
 }

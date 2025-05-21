@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:percent_indicator/circular_percent_indicator.dart';
@@ -25,7 +24,8 @@ class _NavigationExampleState extends State<NavigationExample> {
         leading: Builder(
           builder: (context) {
             return IconButton(
-              icon: const Icon(Icons.menu),color: Colors.white,
+              icon: const Icon(Icons.menu),
+              color: Colors.white,
               iconSize: 30,
               onPressed: () {
                 Scaffold.of(context).openDrawer();
@@ -66,7 +66,6 @@ class _NavigationExampleState extends State<NavigationExample> {
                       fontSize: 16,
                     ),
                   ),
-
                 ],
               ),
             ),
@@ -76,7 +75,8 @@ class _NavigationExampleState extends State<NavigationExample> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                  MaterialPageRoute(
+                      builder: (context) => const NotificationScreen()),
                 );
               },
             ),
@@ -100,7 +100,8 @@ class _NavigationExampleState extends State<NavigationExample> {
               onTap: () {
                 // Handle the tap
               },
-            ), ListTile(
+            ),
+            ListTile(
               leading: const Icon(Icons.settings),
               title: const Text('Settings'),
               onTap: () {
@@ -110,7 +111,6 @@ class _NavigationExampleState extends State<NavigationExample> {
           ],
         ),
       ),
-
       bottomNavigationBar: NavigationBar(
         height: 60,
         backgroundColor: Colors.black,
@@ -142,12 +142,9 @@ class _NavigationExampleState extends State<NavigationExample> {
           NavigationDestination(
             icon: Icon(Icons.settings),
             label: 'Settings',
-
           ),
         ],
       ),
-
-
       body: <Widget>[
         /// Home page
         Stack(
@@ -161,7 +158,6 @@ class _NavigationExampleState extends State<NavigationExample> {
                   fit: BoxFit.cover,
                 ),
               ),
-
             ),
             // Container(
             //   width: MediaQuery.of(context).size.width,
@@ -172,12 +168,12 @@ class _NavigationExampleState extends State<NavigationExample> {
             Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.only( right: 10),
+                  padding: const EdgeInsets.only(right: 10),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Padding(
-                        padding: EdgeInsets.only(left:  20),
+                        padding: EdgeInsets.only(left: 20),
                         child: Text(
                           "HELLO  - Chamath Rathnayaka - ",
                           style: TextStyle(
@@ -187,11 +183,17 @@ class _NavigationExampleState extends State<NavigationExample> {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.notifications, color: Colors.white,size: 30,),
+                        icon: const Icon(
+                          Icons.notifications,
+                          color: Colors.white,
+                          size: 30,
+                        ),
                         onPressed: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                            MaterialPageRoute(
+                                builder: (context) =>
+                                    const NotificationScreen()),
                           );
                           // Handle notification button press
                         },
@@ -256,7 +258,8 @@ class _NavigationExampleState extends State<NavigationExample> {
                         Container(
                           decoration: const BoxDecoration(
                             image: DecorationImage(
-                              image: AssetImage('assets/images/wheather new.jpg'),
+                              image:
+                                  AssetImage('assets/images/wheather new.jpg'),
                               fit: BoxFit.cover,
                             ),
                             borderRadius: BorderRadius.only(
@@ -267,7 +270,6 @@ class _NavigationExampleState extends State<NavigationExample> {
                             ),
                           ),
                         ),
-
                       ],
                     ),
                   ),
@@ -276,11 +278,12 @@ class _NavigationExampleState extends State<NavigationExample> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Padding(
-                      padding: const EdgeInsets.only(top: 70, right: 10), // Adjusted padding
+                      padding: const EdgeInsets.only(
+                          top: 70, right: 10), // Adjusted padding
                       child: Card(
                         color: Colors.black.withOpacity(0.6),
                         shadowColor: Colors.transparent,
-                        child:  SizedBox(
+                        child: SizedBox(
                           width: 250,
                           height: 180,
                           child: Center(
@@ -289,7 +292,8 @@ class _NavigationExampleState extends State<NavigationExample> {
                               children: [
                                 const Text(
                                   'Admin Panel Settings',
-                                  style: TextStyle(color: Colors.white, fontSize: 15),
+                                  style: TextStyle(
+                                      color: Colors.white, fontSize: 15),
                                 ),
                                 const SizedBox(height: 20),
                                 Row(
@@ -297,21 +301,28 @@ class _NavigationExampleState extends State<NavigationExample> {
                                   children: [
                                     const SizedBox(width: 10),
                                     IconButton(
-                                      icon:  const Icon(Icons.attach_email_rounded, color: Colors.blueGrey, size: 40.0),
+                                      icon: const Icon(
+                                          Icons.attach_email_rounded,
+                                          color: Colors.blueGrey,
+                                          size: 40.0),
                                       onPressed: () {
                                         // Handle notification button press
                                       },
                                     ),
                                     const SizedBox(width: 20),
                                     IconButton(
-                                      icon:  const Icon(Icons.admin_panel_settings, color: Colors.blueGrey, size: 40.0),
+                                      icon: const Icon(
+                                          Icons.admin_panel_settings,
+                                          color: Colors.blueGrey,
+                                          size: 40.0),
                                       onPressed: () {
                                         // Handle notification button press
                                       },
                                     ),
                                     const SizedBox(width: 20),
                                     IconButton(
-                                      icon:  const Icon(Icons.settings, color: Colors.blueGrey, size: 40.0),
+                                      icon: const Icon(Icons.settings,
+                                          color: Colors.blueGrey, size: 40.0),
                                       onPressed: () {
                                         // Handle notification button press
                                       },
@@ -325,7 +336,8 @@ class _NavigationExampleState extends State<NavigationExample> {
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.only(top: 70, left: 10), // Adjusted padding
+                      padding: const EdgeInsets.only(
+                          top: 70, left: 10), // Adjusted padding
                       child: Card(
                         color: Colors.black.withOpacity(0.6),
                         shadowColor: Colors.transparent,
@@ -339,7 +351,8 @@ class _NavigationExampleState extends State<NavigationExample> {
                                 padding: EdgeInsets.only(top: 13.0),
                                 child: Text(
                                   'Average Attendance',
-                                  style: TextStyle(color: Colors.white, fontSize: 15),
+                                  style: TextStyle(
+                                      color: Colors.white, fontSize: 15),
                                 ),
                               ),
                               Padding(
@@ -347,7 +360,8 @@ class _NavigationExampleState extends State<NavigationExample> {
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    const Icon(Icons.bar_chart, color: Colors.blueGrey, size: 50.0),
+                                    const Icon(Icons.bar_chart,
+                                        color: Colors.blueGrey, size: 50.0),
                                     const SizedBox(width: 20),
                                     Column(
                                       children: [
@@ -357,7 +371,8 @@ class _NavigationExampleState extends State<NavigationExample> {
                                           percent: 0.60,
                                           center: const Text(
                                             "60%",
-                                            style: TextStyle(color: Colors.white),
+                                            style:
+                                                TextStyle(color: Colors.white),
                                           ),
                                           progressColor: Colors.yellow,
                                         ),
@@ -379,8 +394,7 @@ class _NavigationExampleState extends State<NavigationExample> {
         ),
 
         /// Attendance page
-        Attendance(),
-
+        Attendance(), // This already exists, keep it as is
 
         /// Leaves page
         Card(
@@ -395,6 +409,7 @@ class _NavigationExampleState extends State<NavigationExample> {
             ),
           ),
         ),
+
         /// Payslips page
         Card(
           shadowColor: Colors.transparent,
@@ -408,6 +423,7 @@ class _NavigationExampleState extends State<NavigationExample> {
             ),
           ),
         ),
+
         /// Setting page
         Card(
           shadowColor: Colors.transparent,

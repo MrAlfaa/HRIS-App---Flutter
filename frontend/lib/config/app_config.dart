@@ -23,6 +23,13 @@ class AppConfig {
   static String get registerEndpoint => '$_apiBaseUrl/register';
   static String get apiStatusEndpoint => '$_apiBaseUrl/api/status';
 
+  // Face recognition service URL
+  static String get faceRecognitionUrl => 'http://192.168.53.175:5000';
+
+  // Add these endpoints
+  static String get faceRecognizeEndpoint => '$faceRecognitionUrl/recognize';
+  static String get faceRegisterEndpoint => '$faceRecognitionUrl/register';
+
   // Initialize the config
   static Future<void> initialize() async {
     if (kIsWeb) {

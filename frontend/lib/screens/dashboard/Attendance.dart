@@ -1,10 +1,11 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../config/app_config.dart';
 import '../../widgets/time.dart';
+import 'FaceRecognitionScreen.dart';
 
 class Attendance extends StatefulWidget {
   const Attendance({Key? key}) : super(key: key);
@@ -17,6 +18,7 @@ class _AttendanceState extends State<Attendance> {
   String checkInTime = 'N/A';
   String checkOutTime = 'N/A';
   bool hasCheckedIn = false;
+  bool isShowingFaceRecognition = false;
 
   @override
   void initState() {
@@ -28,82 +30,129 @@ class _AttendanceState extends State<Attendance> {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String? id = prefs.getString("userId");
 
-    Response response = await get(
-      Uri.parse("http:// 192.168.53.175:8080/api/attendance/status/$id"),
-    );
+    if (id == null) {
+      // Handle no user logged in
+      return;
+    }
 
-    if (response.statusCode == 200) {
-      var data = jsonDecode(response.body);
-      setState(() {
-        checkInTime = data['checkInTime'] != null
-            ? DateFormat('hh:mm:ss a')
-                .format(DateTime.parse(data['checkInTime']))
-            : 'N/A';
-        checkOutTime = data['checkOutTime'] != null
-            ? DateFormat('hh:mm:ss a')
-                .format(DateTime.parse(data['checkOutTime']))
-            : 'N/A';
-        hasCheckedIn = data['checkOutTime'] == null;
-      });
-    } else {
-      print('Failed to fetch attendance status');
+    try {
+      http.Response response = await http.get(
+        Uri.parse("${AppConfig.apiBaseUrl}/api/attendance/status/$id"),
+      );
+
+      if (response.statusCode == 200) {
+        var data = jsonDecode(response.body);
+        setState(() {
+          checkInTime = data['checkInTime'] != null
+              ? DateFormat('hh:mm:ss a')
+                  .format(DateTime.parse(data['checkInTime']))
+              : 'N/A';
+          checkOutTime = data['checkOutTime'] != null
+              ? DateFormat('hh:mm:ss a')
+                  .format(DateTime.parse(data['checkOutTime']))
+              : 'N/A';
+          hasCheckedIn =
+              data['checkInTime'] != null && data['checkOutTime'] == null;
+        });
+      } else {
+        print('Failed to fetch attendance status: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching attendance status: $e');
     }
   }
 
-  Future<void> checkIn() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? id = prefs.getString("userId");
-
-    var map = <String, dynamic>{};
-    map["id"] = id;
-
-    Response response = await post(
-      Uri.parse("http:// 192.168.53.175:8080/api/attendance/checkin"),
-      headers: <String, String>{
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: map,
-    );
-    print(response.statusCode);
-
-    if (response.statusCode == 200) {
-      setState(() {
-        checkInTime = DateFormat('hh:mm:ss a').format(DateTime.now());
-        hasCheckedIn = true;
-      });
-    } else {
-      print('Failed to check in');
-    }
+  Future<void> handleFaceRecognition(bool isCheckIn) async {
+    setState(() {
+      isShowingFaceRecognition = true;
+    });
   }
 
-  Future<void> checkOut() async {
+  void handleFaceRecognized(int userId, String username) async {
+    // Save user ID if not already saved
     SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? id = prefs.getString("userId");
+    await prefs.setString("userId", userId.toString());
+    await prefs.setString("username", username);
 
-    var map = <String, dynamic>{};
-    map["id"] = id;
+    try {
+      if (!hasCheckedIn) {
+        // Handle check-in
+        http.Response response = await http.post(
+          Uri.parse("${AppConfig.apiBaseUrl}/api/attendance/face-checkin"),
+          headers: {"Content-Type": "application/json"},
+          body: jsonEncode({"userId": userId}),
+        );
 
-    Response response = await post(
-      Uri.parse("http:// 192.168.53.175:8080/api/attendance/checkout/$id"),
-      headers: <String, String>{
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: map,
-    );
+        if (response.statusCode == 200) {
+          setState(() {
+            checkInTime = DateFormat('hh:mm:ss a').format(DateTime.now());
+            hasCheckedIn = true;
+            isShowingFaceRecognition = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Successfully checked in!")),
+          );
+        } else {
+          print('Failed to check in: ${response.statusCode}');
+          setState(() {
+            isShowingFaceRecognition = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Failed to check in")),
+          );
+        }
+      } else {
+        // Handle check-out
+        http.Response response = await http.post(
+          Uri.parse("${AppConfig.apiBaseUrl}/api/attendance/face-checkout"),
+          headers: {"Content-Type": "application/json"},
+          body: jsonEncode({"userId": userId}),
+        );
 
-    if (response.statusCode == 200) {
-      print("success");
+        if (response.statusCode == 200) {
+          setState(() {
+            checkOutTime = DateFormat('hh:mm:ss a').format(DateTime.now());
+            hasCheckedIn = false;
+            isShowingFaceRecognition = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Successfully checked out!")),
+          );
+        } else {
+          print('Failed to check out: ${response.statusCode}');
+          setState(() {
+            isShowingFaceRecognition = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Failed to check out")),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error during face-based attendance: $e');
       setState(() {
-        checkOutTime = DateFormat('hh:mm:ss a').format(DateTime.now());
-        hasCheckedIn = false;
+        isShowingFaceRecognition = false;
       });
-    } else {
-      print('Failed to check out');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e")),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (isShowingFaceRecognition) {
+      return FaceRecognitionScreen(
+        isCheckIn: !hasCheckedIn,
+        onFaceRecognized: handleFaceRecognized,
+        onCancel: () {
+          setState(() {
+            isShowingFaceRecognition = false;
+          });
+        },
+      );
+    }
+
     return Scaffold(
       body: Stack(
         children: <Widget>[
@@ -260,18 +309,17 @@ class _AttendanceState extends State<Attendance> {
                       child: SizedBox(
                         width: 200,
                         height: 70,
-                        child: ElevatedButton(
-                          onPressed: checkIn,
+                        child: ElevatedButton.icon(
+                          icon: Icon(Icons.face, color: Colors.white),
+                          label: Text("FACE CHECK IN",
+                              style: TextStyle(color: Colors.white)),
+                          onPressed: () => handleFaceRecognition(true),
                           style: ElevatedButton.styleFrom(
                             textStyle: const TextStyle(fontSize: 20),
                             backgroundColor: Colors.black.withOpacity(0.6),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(50),
                             ),
-                          ),
-                          child: const Text(
-                            "CHECK IN",
-                            style: TextStyle(color: Colors.white),
                           ),
                         ),
                       ),
@@ -283,18 +331,20 @@ class _AttendanceState extends State<Attendance> {
                     child: SizedBox(
                       width: 200,
                       height: 70,
-                      child: ElevatedButton(
-                        onPressed: checkOut,
+                      child: ElevatedButton.icon(
+                        icon: Icon(Icons.face, color: Colors.white),
+                        label: Text("FACE CHECK OUT",
+                            style: TextStyle(color: Colors.white)),
+                        onPressed: hasCheckedIn
+                            ? () => handleFaceRecognition(false)
+                            : null,
                         style: ElevatedButton.styleFrom(
                           textStyle: const TextStyle(fontSize: 20),
                           backgroundColor: Colors.black.withOpacity(0.6),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(50),
                           ),
-                        ),
-                        child: const Text(
-                          "CHECK OUT",
-                          style: TextStyle(color: Colors.white),
+                          disabledBackgroundColor: Colors.grey.withOpacity(0.3),
                         ),
                       ),
                     ),

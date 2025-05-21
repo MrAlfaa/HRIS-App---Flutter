@@ -41,3 +41,28 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Face recognition temporary files
+*_processed.jpg
+*_enhanced.jpg
+*_temp.jpg
+*.tmp
+
+# Environment configuration
+.env
+.env.local
+
+# Local SQLite database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Local configuration
+local_config.json
+
+# System files
+Thumbs.db
+desktop.ini
+
+# Generated files
+generated_plugin_registrant.*
