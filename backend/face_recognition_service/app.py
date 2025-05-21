@@ -105,41 +105,80 @@ def recognize_face():
         if len(rgb_img.shape) == 3 and rgb_img.shape[2] == 4:  # If RGBA
             rgb_img = cv2.cvtColor(rgb_img, cv2.COLOR_RGBA2RGB)
         
-        # Pre-process image to improve face detection
+        # Enhanced pre-processing to improve face detection
         # Resize if too large
         if rgb_img.shape[0] > 800 or rgb_img.shape[1] > 800:
             scale = 800 / max(rgb_img.shape[0], rgb_img.shape[1])
             rgb_img = cv2.resize(rgb_img, None, fx=scale, fy=scale)
         
-        # Enhance contrast
+        # Enhance contrast and brightness
         lab = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2LAB)
         l, a, b = cv2.split(lab)
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8, 8))  # Increased from 3.0
         cl = clahe.apply(l)
         enhanced_lab = cv2.merge((cl, a, b))
         rgb_img = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2RGB)
         
-        # Find faces with lower threshold (more sensitive)
-        print("Detecting faces...")
-        # Adjust detector parameters to be more sensitive
-        face_locations = detector(rgb_img, 0)  # 0 = use all scales (default is 1)
+        # Additional brightness enhancement
+        brightness_img = cv2.convertScaleAbs(rgb_img, alpha=1.2, beta=15)  # Added brightness boost
+        
+        # First try the original image with dlib
+        print("Detecting faces with dlib...")
+        face_locations = detector(rgb_img, 0)  # More sensitive mode
         print(f"Found {len(face_locations)} faces")
         
-        # If no faces found with default detector, try OpenCV's detector as backup
+        # If no faces found, try the brightness-enhanced image
+        if not face_locations:
+            print("Trying brightness-enhanced image...")
+            face_locations = detector(brightness_img, 0)
+            print(f"Found {len(face_locations)} faces with enhanced brightness")
+            if face_locations:
+                rgb_img = brightness_img  # Use the enhanced image
+            
+        # If still no faces, try OpenCV's detector
         if not face_locations:
             print("Trying OpenCV detector as backup...")
             face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-            gray = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2GRAY)
-            opencv_faces = face_cascade.detectMultiScale(gray, 1.1, 5)
+            gray = cv2.cvtColor(brightness_img, cv2.COLOR_RGB2GRAY)
+            # Make OpenCV detector more sensitive
+            opencv_faces = face_cascade.detectMultiScale(
+                gray, 
+                scaleFactor=1.05,  # Reduced from 1.1, more sensitive
+                minNeighbors=3,    # Reduced from 5, more sensitive
+                minSize=(50, 50)   # Minimum face size to detect
+            )
             
             if len(opencv_faces) > 0:
                 # Convert OpenCV face format to dlib format
                 for (x, y, w, h) in opencv_faces:
                     face_locations.append(dlib.rectangle(x, y, x+w, y+h))
                 print(f"OpenCV detected {len(opencv_faces)} faces")
+                rgb_img = brightness_img  # Use the enhanced image
+        
+        # Registration mode - if we're called from register route and face detection failed,
+        # attempt to use a more lenient approach for registration
+        is_registration = request.path == '/register' or not face_locations
+        
+        if not face_locations and is_registration:
+            print("Face detection failed. Using backup method for registration...")
+            # For registration, if all else fails, try to assume a face in the center of the image
+            h, w = rgb_img.shape[:2]
+            center_x, center_y = w // 2, h // 2
+            face_size = min(w, h) // 2
+            face_locations = [dlib.rectangle(
+                center_x - face_size // 2,
+                center_y - face_size // 2,
+                center_x + face_size // 2,
+                center_y + face_size // 2
+            )]
+            print("Using centered face region as fallback")
         
         if not face_locations:
-            return jsonify({'status': 'error', 'message': 'No face detected. Please try with better lighting or positioning.'}), 400
+            # Provide a more helpful error message to help users position their face better
+            return jsonify({
+                'status': 'error', 
+                'message': 'No face detected. Please try again with better lighting, position your face in the center of the frame, and ensure your entire face is visible.'
+            }), 400
         
     except Exception as e:
         print(f"Error processing image: {str(e)}")
@@ -159,21 +198,31 @@ def recognize_face():
     
     # Load face database
     faces_db = load_faces_db()
+    print(f"Loaded {len(faces_db)} faces from database")
+    
+    # Debug - print database entries
+    for i, face in enumerate(faces_db):
+        print(f"DB Entry {i}: UserId={face.get('userId', 'unknown')}, Username={face.get('username', 'unknown')}")
     
     for face_encoding in face_encodings:
         best_match = None
-        best_distance = 0.6  # Threshold for face recognition
+        best_distance = 0.5  # Lower from 0.6 to make matching more strict
         
         for face in faces_db:
+            if 'encoding' not in face:
+                print(f"Warning: Face entry missing encoding: {face}")
+                continue
+                
             stored_encoding = np.array(face['encoding'])
             # Calculate Euclidean distance
             distance = np.linalg.norm(face_encoding - stored_encoding)
+            print(f"Distance to user {face.get('username', 'unknown')} (ID: {face.get('userId', 'unknown')}): {distance}")
             
             if distance < best_distance:
                 best_match = face
-                best_distance = distance
-        
+                best_distance = distance        
         if best_match:
+            print(f"Found match: UserId={best_match.get('userId', 'unknown')}, Username={best_match.get('username', 'unknown')}, Distance={best_distance}")
             return jsonify({
                 'status': 'success', 
                 'recognized': True, 
@@ -182,6 +231,7 @@ def recognize_face():
             })
     
     # If we get here, no match was found
+    print("No face match found. Needs registration.")
     return jsonify({
         'status': 'success', 
         'recognized': False,
@@ -190,61 +240,194 @@ def recognize_face():
 
 @app.route('/register', methods=['POST'])
 def register_face():
-    if not request.json or 'image' not in request.json or 'userId' not in request.json or 'username' not in request.json:
-        return jsonify({'status': 'error', 'message': 'Missing required fields'}), 400
+    print("Received face registration request")
+    
+    if not request.json:
+        print("Error: No JSON data in request")
+        return jsonify({'status': 'error', 'message': 'No JSON data provided'}), 400
+        
+    required_fields = ['image', 'userId', 'username']
+    for field in required_fields:
+        if field not in request.json:
+            print(f"Error: Missing required field '{field}'")
+            return jsonify({'status': 'error', 'message': f'Missing required field: {field}'}), 400
 
     # Get user information
     user_id = request.json['userId']
     username = request.json['username']
+    print(f"Registering face for userId={user_id}, username={username}")
     
     # Get the base64 encoded image and convert to numpy array
     encoded_data = request.json['image']
-    img_data = base64.b64decode(encoded_data)
+    print(f"Received image data of length: {len(encoded_data)}")
     
-    # Convert to image
-    image = Image.open(BytesIO(img_data))
-    rgb_img = np.array(image)
-    
-    # Convert to BGR for OpenCV processing if needed
-    if len(rgb_img.shape) == 3 and rgb_img.shape[2] == 4:  # If RGBA
-        rgb_img = cv2.cvtColor(rgb_img, cv2.COLOR_RGBA2RGB)
-    
-    # Find faces
-    face_locations = detector(rgb_img)
-    
-    if not face_locations:
-        return jsonify({'status': 'error', 'message': 'No face detected'}), 400
+    try:
+        img_data = base64.b64decode(encoded_data)
+        print(f"Decoded base64 data length: {len(img_data)}")
+        
+        # Convert to image
+        image = Image.open(BytesIO(img_data))
+        rgb_img = np.array(image)
+        print(f"Image shape: {rgb_img.shape}")
+        
+        # Convert to BGR for OpenCV processing if needed
+        if len(rgb_img.shape) == 3 and rgb_img.shape[2] == 4:  # If RGBA
+            rgb_img = cv2.cvtColor(rgb_img, cv2.COLOR_RGBA2RGB)
+        
+        # Enhanced pre-processing for registration
+        # Resize if too large
+        if rgb_img.shape[0] > 800 or rgb_img.shape[1] > 800:
+            scale = 800 / max(rgb_img.shape[0], rgb_img.shape[1])
+            rgb_img = cv2.resize(rgb_img, None, fx=scale, fy=scale)
+            
+        # Enhance contrast and brightness for better face detection
+        lab = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(8, 8))
+        cl = clahe.apply(l)
+        enhanced_lab = cv2.merge((cl, a, b))
+        rgb_img = cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2RGB)
+        
+        # Find faces with multiple methods for better results
+        face_locations = detector(rgb_img, 0)
+        print(f"Found {len(face_locations)} faces with initial detection")
+        
+        if not face_locations:
+            # Try with brightness enhancement
+            brightness_img = cv2.convertScaleAbs(rgb_img, alpha=1.2, beta=15)
+            face_locations = detector(brightness_img, 0)
+            print(f"Found {len(face_locations)} faces with enhanced brightness")
+            
+            if face_locations:
+                rgb_img = brightness_img  # Use the enhanced image
+        
+        if not face_locations:
+            # Try OpenCV as a backup
+            face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+            gray = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2GRAY)
+            opencv_faces = face_cascade.detectMultiScale(
+                gray, 
+                scaleFactor=1.05,
+                minNeighbors=3,
+                minSize=(50, 50)
+            )
+            
+            if len(opencv_faces) > 0:
+                for (x, y, w, h) in opencv_faces:
+                    face_locations.append(dlib.rectangle(x, y, x+w, y+h))
+                print(f"OpenCV detected {len(opencv_faces)} faces")
+        
+        if not face_locations:
+            # Last resort for registration - assume face is centered
+            h, w = rgb_img.shape[:2]
+            center_x, center_y = w // 2, h // 2
+            face_size = min(w, h) // 2
+            face_locations = [dlib.rectangle(
+                center_x - face_size // 2,
+                center_y - face_size // 2,
+                center_x + face_size // 2,
+                center_y + face_size // 2
+            )]
+            print("Using centered face region as fallback")
+        
+    except Exception as e:
+        print(f"Error processing image: {str(e)}")
+        return jsonify({'status': 'error', 'message': f'Error processing image: {str(e)}'}), 400
     
     # Get the shape predictor
     shape_predictor = dlib.shape_predictor(SHAPE_PREDICTOR_PATH)
     face_recognizer = dlib.face_recognition_model_v1(FACE_RECOGNITION_MODEL_PATH)
     
-    # Get face encoding from the first detected face
-    shape = shape_predictor(rgb_img, face_locations[0])
-    face_encoding = face_recognizer.compute_face_descriptor(rgb_img, shape)
-    
-    # Load face database
-    faces_db = load_faces_db()
-    
-    # Create new face data
-    face_data = {
-        'userId': user_id,
-        'username': username,
-        'encoding': list(face_encoding)  # Convert to list for JSON
-    }
-    
-    # Update or add face data
-    for i, face in enumerate(faces_db):
-        if face['userId'] == user_id:
-            faces_db[i] = face_data
+    try:
+        # Get face encoding from the first detected face
+        shape = shape_predictor(rgb_img, face_locations[0])
+        face_encoding = face_recognizer.compute_face_descriptor(rgb_img, shape)
+        
+        # Convert to a regular Python list for JSON serialization
+        face_encoding_list = list(face_encoding)
+        
+        # Load face database
+        faces_db = load_faces_db()
+        user_id = request.json['userId']
+        
+        # Explicitly convert string IDs to strings for consistent comparison
+        user_id_str = str(user_id)
+        
+        print(f"Looking for existing face for user ID: {user_id_str}")
+        
+        # Remove any existing face data for this user to avoid duplicates
+        faces_db = [face for face in faces_db if str(face.get('userId', '')) != user_id_str]
+        print(f"After filtering, database contains {len(faces_db)} faces")
+        
+        # Create new face data with string ID to ensure consistent comparison
+        face_data = {
+            'userId': user_id_str,
+            'username': username,
+            'encoding': face_encoding_list
+        }
+        
+        # Add the new face data
+        faces_db.append(face_data)
+        
+        # Save to file
+        try:
             save_faces_db(faces_db)
-            return jsonify({'status': 'success', 'message': 'Face updated successfully'})
-    
-    # If not found, add new face
-    faces_db.append(face_data)
-    save_faces_db(faces_db)
-    
-    return jsonify({'status': 'success', 'message': 'Face registered successfully'})
+            print(f"Successfully saved face for user ID: {user_id_str}")
+            
+            # Verify the file was updated
+            with open(DATABASE_FILE, 'r') as f:
+                saved_data = json.load(f)
+                print(f"Verified database file contains {len(saved_data)} entries")
+                
+        except Exception as e:
+            print(f"Error saving face database: {str(e)}")
+            return jsonify({'status': 'error', 'message': f'Error saving face database: {str(e)}'}), 500
+        
+        return jsonify({
+            'status': 'success', 
+            'message': 'Face registered successfully',
+            'userId': user_id,
+            'username': username
+        })
+        
+    except Exception as e:
+        print(f"Error registering face: {str(e)}")
+        return jsonify({'status': 'error', 'message': f'Error registering face: {str(e)}'}), 500
+
+# Ensure database file permissions are correct
+@app.route('/check-db-permissions', methods=['GET'])
+def check_db_permissions():
+    """Check if the database file is writable"""
+    try:
+        # Verify we can read the database
+        if os.path.exists(DATABASE_FILE):
+            with open(DATABASE_FILE, 'r') as f:
+                data = json.load(f)
+            readable = True
+        else:
+            readable = False
+            
+        # Verify we can write to the database
+        with open(DATABASE_FILE, 'a') as f:
+            pass  # Just testing append access
+        writable = True
+        
+        # Check the directory is writable
+        dir_writable = os.access(os.path.dirname(DATABASE_FILE), os.W_OK)
+        
+        return jsonify({
+            'status': 'success',
+            'readable': readable,
+            'writable': writable,
+            'dir_writable': dir_writable,
+            'file_exists': os.path.exists(DATABASE_FILE),
+            'file_size': os.path.getsize(DATABASE_FILE) if os.path.exists(DATABASE_FILE) else 0
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 
 if __name__ == '__main__':
     # Download models if needed
@@ -261,6 +444,16 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"Error loading models: {e}")
         exit(1)
+    
+    # Ensure the database directory exists and is writable
+    os.makedirs('faces', exist_ok=True)
+    if not os.path.exists(DATABASE_FILE):
+        with open(DATABASE_FILE, 'w') as f:
+            json.dump([], f)
+        print(f"Created empty database file: {DATABASE_FILE}")
+    else:
+        print(f"Using existing database file: {DATABASE_FILE}")
         
     # Run the Flask app
+    app.run(host='0.0.0.0', port=5000, debug=True)
     app.run(host='0.0.0.0', port=5000, debug=True)

@@ -12,53 +12,83 @@ import java.util.Optional;
 public class AttendanceService {
 
     @Autowired
-    private AttendanceRecordRepository attendanceRecordRepository;
+    private AttendanceRecordRepository attendanceRepository;
 
     public AttendanceRecord checkIn(int userId) {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime startOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MIDNIGHT);
-        LocalDateTime endOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MAX);
+        return checkIn(userId, 0.0, 0.0, "");
+    }
+    
+    public AttendanceRecord checkIn(int userId, double latitude, double longitude, String address) {
+        // Get the start and end of the current day
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        LocalDateTime endOfDay = LocalDate.now().atTime(LocalTime.MAX);
 
-        // Check if already checked in today
-        Optional<AttendanceRecord> existingRecord = attendanceRecordRepository
+        // Check if the user has already checked in today
+        Optional<AttendanceRecord> existingRecord = attendanceRepository
                 .findFirstByUserIdAndCheckInTimeBetween(userId, startOfDay, endOfDay);
 
         if (existingRecord.isPresent()) {
-            return existingRecord.get(); // Already checked in
+            if (existingRecord.get().getCheckOutTime() == null) {
+                throw new RuntimeException("User already checked in today");
+            } else {
+                throw new RuntimeException("User has already completed check-in/check-out for today");
+            }
         }
 
-        // Create new check-in record
+        // Create a new attendance record
         AttendanceRecord record = new AttendanceRecord();
         record.setUserId(userId);
-        record.setCheckInTime(now);
-        return attendanceRecordRepository.save(record);
+        record.setCheckInTime(LocalDateTime.now());
+        record.setCheckInLatitude(latitude);
+        record.setCheckInLongitude(longitude);
+        record.setCheckInAddress(address);
+        
+        return attendanceRepository.save(record);
     }
 
     public AttendanceRecord checkOut(int userId) {
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime startOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MIDNIGHT);
-        LocalDateTime endOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MAX);
+        return checkOut(userId, 0.0, 0.0, "");
+    }
+    
+    public AttendanceRecord checkOut(int userId, double latitude, double longitude, String address) {
+        // Get the start and end of the current day
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        LocalDateTime endOfDay = LocalDate.now().atTime(LocalTime.MAX);
 
-        // Find today's attendance record with null check-out time
-        Optional<AttendanceRecord> existingRecord = attendanceRecordRepository
+        // Find the user's check-in record for today that doesn't have a check-out time
+        Optional<AttendanceRecord> record = attendanceRepository
                 .findFirstByUserIdAndCheckInTimeBetweenAndCheckOutTimeIsNull(userId, startOfDay, endOfDay);
 
-        if (existingRecord.isPresent()) {
-            AttendanceRecord record = existingRecord.get();
-            record.setCheckOutTime(now);
-            return attendanceRecordRepository.save(record);
+        if (!record.isPresent()) {
+            throw new RuntimeException("No active check-in found for today");
         }
 
-        return null; // No check-in record found
+        // Update the record with check-out information
+        AttendanceRecord attendanceRecord = record.get();
+        attendanceRecord.setCheckOutTime(LocalDateTime.now());
+        attendanceRecord.setCheckOutLatitude(latitude);
+        attendanceRecord.setCheckOutLongitude(longitude);
+        attendanceRecord.setCheckOutAddress(address);
+        
+        return attendanceRepository.save(attendanceRecord);
     }
-
+    
     public AttendanceRecord getAttendanceStatus(int userId) {
-        LocalDateTime startOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MIDNIGHT);
-        LocalDateTime endOfDay = LocalDateTime.of(LocalDate.now(), LocalTime.MAX);
+        // Get the start and end of the current day
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        LocalDateTime endOfDay = LocalDate.now().atTime(LocalTime.MAX);
 
-        Optional<AttendanceRecord> todaysRecord = attendanceRecordRepository
+        // Find today's attendance record for the user
+        Optional<AttendanceRecord> record = attendanceRepository
                 .findFirstByUserIdAndCheckInTimeBetween(userId, startOfDay, endOfDay);
 
-        return todaysRecord.orElse(new AttendanceRecord());
+        if (!record.isPresent()) {
+            // Return an empty record if no attendance found
+            AttendanceRecord emptyRecord = new AttendanceRecord();
+            emptyRecord.setUserId(userId);
+            return emptyRecord;
+        }
+
+        return record.get();
     }
 }

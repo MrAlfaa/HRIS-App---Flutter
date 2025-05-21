@@ -31,10 +31,18 @@ public class UserService {
             throw new RuntimeException("Failed to save user: " + e.getMessage());
         }
     }
-
-//    public User findUserByUsername(String username) {
-//        return userRepo.findByUsername(username);
-//    }
+    public User findUserByUsername(String username) {
+        if (username == null || username.trim().isEmpty()) {
+            return null;
+        }
+        
+        try {
+            return userRepo.findByUsername(username);
+        } catch (Exception e) {
+            System.err.println("Error finding user by username: " + e.getMessage());
+            return null;
+        }
+    }
 
     public User validateUser(String username, String password) {
         if (username == null || username.trim().isEmpty()) {

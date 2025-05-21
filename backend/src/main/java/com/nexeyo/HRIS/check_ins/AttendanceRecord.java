@@ -18,6 +18,18 @@ public class AttendanceRecord {
     private int userId;
 
     private LocalDateTime checkInTime;
+    
+    private double checkInLatitude;
+    
+    private double checkInLongitude;
+    
+    private String checkInAddress;
 
     private LocalDateTime checkOutTime;
+    
+    private double checkOutLatitude;
+    
+    private double checkOutLongitude;
+    
+    private String checkOutAddress;
 }

@@ -5,7 +5,9 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../config/app_config.dart';
 import '../../widgets/time.dart';
+import '../../services/location_service.dart';
 import 'FaceRecognitionScreen.dart';
+import '../../services/session_manager.dart'; // Add this import
 
 class Attendance extends StatefulWidget {
   const Attendance({Key? key}) : super(key: key);
@@ -19,6 +21,8 @@ class _AttendanceState extends State<Attendance> {
   String checkOutTime = 'N/A';
   bool hasCheckedIn = false;
   bool isShowingFaceRecognition = false;
+  String? checkInLocation = 'N/A';
+  String? checkOutLocation = 'N/A';
 
   @override
   void initState() {
@@ -53,6 +57,10 @@ class _AttendanceState extends State<Attendance> {
               : 'N/A';
           hasCheckedIn =
               data['checkInTime'] != null && data['checkOutTime'] == null;
+
+          // Add location display
+          checkInLocation = data['checkInAddress'] ?? 'N/A';
+          checkOutLocation = data['checkOutAddress'] ?? 'N/A';
         });
       } else {
         print('Failed to fetch attendance status: ${response.statusCode}');
@@ -69,25 +77,44 @@ class _AttendanceState extends State<Attendance> {
   }
 
   void handleFaceRecognized(int userId, String username) async {
-    // Save user ID if not already saved
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString("userId", userId.toString());
-    await prefs.setString("username", username);
+    // Save user ID and mark face as registered
+    await SessionManager.saveUserSession(
+      userId: userId.toString(),
+      username: username,
+      faceRegistered: true, // Mark face as registered
+    );
+
+    // Get current location
+    LocationData? locationData =
+        await LocationService.getCurrentLocation(context);
 
     try {
       if (!hasCheckedIn) {
         // Handle check-in
+        Map<String, dynamic> requestBody = {"userId": userId};
+
+        // Add location data if available
+        if (locationData != null) {
+          requestBody["location"] = locationData.toJson();
+        }
+
+        print("Sending check-in request with data: $requestBody");
         http.Response response = await http.post(
           Uri.parse("${AppConfig.apiBaseUrl}/api/attendance/face-checkin"),
           headers: {"Content-Type": "application/json"},
-          body: jsonEncode({"userId": userId}),
+          body: jsonEncode(requestBody),
         );
 
+        print("Check-in response status: ${response.statusCode}");
+        print("Check-in response body: ${response.body}");
+
         if (response.statusCode == 200) {
+          var responseData = jsonDecode(response.body);
           setState(() {
             checkInTime = DateFormat('hh:mm:ss a').format(DateTime.now());
             hasCheckedIn = true;
             isShowingFaceRecognition = false;
+            checkInLocation = locationData?.address ?? 'Location not available';
           });
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text("Successfully checked in!")),
@@ -97,23 +124,49 @@ class _AttendanceState extends State<Attendance> {
           setState(() {
             isShowingFaceRecognition = false;
           });
+
+          // Parse error message
+          String errorMsg = "Failed to check in";
+          try {
+            final errorData = jsonDecode(response.body);
+            if (errorData.containsKey('error')) {
+              errorMsg = errorData['error'];
+            }
+          } catch (e) {
+            // Ignore parsing errors
+          }
+
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Failed to check in")),
+            SnackBar(content: Text(errorMsg)),
           );
         }
       } else {
-        // Handle check-out
+        // Handle check-out with similar improvements
+        Map<String, dynamic> requestBody = {"userId": userId};
+
+        // Add location data if available
+        if (locationData != null) {
+          requestBody["location"] = locationData.toJson();
+        }
+
+        print("Sending check-out request with data: $requestBody");
         http.Response response = await http.post(
           Uri.parse("${AppConfig.apiBaseUrl}/api/attendance/face-checkout"),
           headers: {"Content-Type": "application/json"},
-          body: jsonEncode({"userId": userId}),
+          body: jsonEncode(requestBody),
         );
 
+        print("Check-out response status: ${response.statusCode}");
+        print("Check-out response body: ${response.body}");
+
         if (response.statusCode == 200) {
+          var responseData = jsonDecode(response.body);
           setState(() {
             checkOutTime = DateFormat('hh:mm:ss a').format(DateTime.now());
             hasCheckedIn = false;
             isShowingFaceRecognition = false;
+            checkOutLocation =
+                locationData?.address ?? 'Location not available';
           });
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text("Successfully checked out!")),
@@ -123,8 +176,20 @@ class _AttendanceState extends State<Attendance> {
           setState(() {
             isShowingFaceRecognition = false;
           });
+
+          // Parse error message
+          String errorMsg = "Failed to check out";
+          try {
+            final errorData = jsonDecode(response.body);
+            if (errorData.containsKey('error')) {
+              errorMsg = errorData['error'];
+            }
+          } catch (e) {
+            // Ignore parsing errors
+          }
+
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Failed to check out")),
+            SnackBar(content: Text(errorMsg)),
           );
         }
       }
@@ -222,7 +287,7 @@ class _AttendanceState extends State<Attendance> {
                   child: Center(
                     child: Container(
                       width: 550,
-                      height: 250,
+                      height: 300, // Increased height to accommodate location
                       decoration: BoxDecoration(
                         color: Colors.black.withOpacity(0.4),
                         borderRadius: BorderRadius.circular(20),
@@ -257,6 +322,24 @@ class _AttendanceState extends State<Attendance> {
                                       fontWeight: FontWeight.bold,
                                       color: Colors.white),
                                 ),
+                                SizedBox(height: 10),
+                                Text(
+                                  "Location:",
+                                  style: TextStyle(
+                                      fontSize: 16, color: Colors.white70),
+                                ),
+                                Container(
+                                  padding: EdgeInsets.all(5),
+                                  width: 150,
+                                  child: Text(
+                                    checkInLocation ?? 'N/A',
+                                    style: TextStyle(
+                                        fontSize: 14, color: Colors.white),
+                                    textAlign: TextAlign.center,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -276,6 +359,24 @@ class _AttendanceState extends State<Attendance> {
                                       fontSize: 30,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.white),
+                                ),
+                                SizedBox(height: 10),
+                                Text(
+                                  "Location:",
+                                  style: TextStyle(
+                                      fontSize: 16, color: Colors.white70),
+                                ),
+                                Container(
+                                  padding: EdgeInsets.all(5),
+                                  width: 150,
+                                  child: Text(
+                                    checkOutLocation ?? 'N/A',
+                                    style: TextStyle(
+                                        fontSize: 14, color: Colors.white),
+                                    textAlign: TextAlign.center,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                               ],
                             ),
@@ -304,7 +405,8 @@ class _AttendanceState extends State<Attendance> {
                 ),
                 if (!hasCheckedIn)
                   Padding(
-                    padding: const EdgeInsets.only(top: 80.0),
+                    padding:
+                        const EdgeInsets.only(top: 40.0), // Reduced padding
                     child: Center(
                       child: SizedBox(
                         width: 200,
