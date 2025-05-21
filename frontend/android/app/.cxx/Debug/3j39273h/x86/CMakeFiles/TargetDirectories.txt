@@ -1,0 +1,2 @@
+D:/PROJECTS/Out Source Project/Attendence Managament System/frontend/android/app/.cxx/Debug/3j39273h/x86/CMakeFiles/edit_cache.dir
+D:/PROJECTS/Out Source Project/Attendence Managament System/frontend/android/app/.cxx/Debug/3j39273h/x86/CMakeFiles/rebuild_cache.dir
